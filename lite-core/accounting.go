@@ -9,6 +9,7 @@ import (
  "sort"
  "strings"
  "sync"
+ "time"
 )
 type JournalLine struct {
  Ledger string `json:"ledger"`
@@ -36,6 +37,7 @@ func openAccounting(path string)(*AccountingStore,error){
 }
 func validateJournal(j Journal)error{
  if !idPattern.MatchString(j.ID)||!idPattern.MatchString(j.CompanyID)||len(j.Date)!=10||len(j.Narration)>500||len(j.Lines)<2||len(j.Lines)>100{return errors.New("invalid journal")}
+ if parsed,err:=time.Parse("2006-01-02",j.Date);err!=nil||parsed.Format("2006-01-02")!=j.Date{return errors.New("invalid journal date")}
  var debit,credit int64
  for _,l:=range j.Lines{
   if !idPattern.MatchString(l.Ledger)||l.DebitPaise<0||l.CreditPaise<0||(l.DebitPaise>0&&l.CreditPaise>0)||(l.DebitPaise==0&&l.CreditPaise==0){return errors.New("invalid journal line")}
