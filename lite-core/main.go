@@ -13,7 +13,7 @@ import (
  "syscall"
  "time"
 )
-type config struct { token string; modules []string; registry *Registry; crm *CRMStore; licensePath string; publicKeyPath string }
+type config struct { token string; modules []string; registry *Registry; crm *CRMStore; accounts *AccountingStore; licensePath string; publicKeyPath string }
 func newHandler(c config) http.Handler {
  mux:=http.NewServeMux()
  mux.HandleFunc("GET /health",func(w http.ResponseWriter,r *http.Request){reply(w,200,map[string]any{"status":"ok","service":"omisha-lite-core","version":"5.1-dev"})})
@@ -84,7 +84,49 @@ func newHandler(c config) http.Handler {
   if err:=c.crm.upsert(contact);err!=nil{reply(w,400,map[string]string{"error":err.Error()});return}
   reply(w,200,map[string]string{"status":"saved","id":contact.ID})
  })
+ mux.HandleFunc("POST /v1/companies/{company}/journals",func(w http.ResponseWriter,r *http.Request){
+  if !authenticated(w,r){return}
+  company:=r.PathValue("company")
+  if !financeAccess(w,c,company){return}
+  r.Body=http.MaxBytesReader(w,r.Body,65536)
+  var j Journal
+  dec:=json.NewDecoder(r.Body);dec.DisallowUnknownFields()
+  if err:=dec.Decode(&j);err!=nil{reply(w,400,map[string]string{"error":"invalid JSON"});return}
+  var extra any
+  if err:=dec.Decode(&extra);err!=io.EOF{reply(w,400,map[string]string{"error":"trailing JSON"});return}
+  j.CompanyID=company
+  if err:=c.accounts.create(j);err!=nil{reply(w,400,map[string]string{"error":err.Error()});return}
+  reply(w,201,map[string]string{"status":"posted","id":j.ID})
+ })
+ mux.HandleFunc("GET /v1/companies/{company}/journals",func(w http.ResponseWriter,r *http.Request){
+  if !authenticated(w,r){return}
+  company:=r.PathValue("company")
+  if !financeAccess(w,c,company){return}
+  reply(w,200,map[string]any{"journals":c.accounts.list(company)})
+ })
+ mux.HandleFunc("GET /v1/companies/{company}/trial-balance",func(w http.ResponseWriter,r *http.Request){
+  if !authenticated(w,r){return}
+  company:=r.PathValue("company")
+  if !financeAccess(w,c,company){return}
+  result,err:=c.accounts.trialBalance(company)
+  if err!=nil{reply(w,500,map[string]string{"error":"trial balance calculation failed"});return}
+  reply(w,200,result)
+ })
  return mux
+}
+func financeAccess(w http.ResponseWriter,c config,company string)bool{
+ if c.registry==nil||c.accounts==nil{reply(w,503,map[string]string{"error":"accounting store unavailable"});return false}
+ if !idPattern.MatchString(company){reply(w,400,map[string]string{"error":"invalid company id"});return false}
+ enabled:=false
+ for _,v:=range c.registry.list(){if v.ID==company{for _,m:=range v.Modules{if m=="finance"{enabled=true}}}}
+ if !enabled{reply(w,404,map[string]string{"error":"company or finance module not found"});return false}
+ if c.licensePath!=""{
+  ent,err:=loadLicense(c.licensePath,c.publicKeyPath)
+  if err!=nil{reply(w,403,map[string]string{"error":"license invalid or expired"});return false}
+  licensed:=false;for _,m:=range ent.Modules{if m=="finance"{licensed=true}}
+  if !licensed{reply(w,403,map[string]string{"error":"finance not licensed"});return false}
+ }
+ return true
 }
 func crmAccess(w http.ResponseWriter,c config,company string)bool{
  if c.registry==nil||c.crm==nil{reply(w,503,map[string]string{"error":"store unavailable"});return false}
@@ -117,7 +159,9 @@ func main(){
  registry,err:=openRegistry(path);if err!=nil{log.Fatal(err)}
  crmPath:=os.Getenv("OMISHA_CRM_PATH");if crmPath==""{crmPath="/data/crm.json"}
  crm,err:=openCRM(crmPath);if err!=nil{log.Fatal(err)}
- srv:=&http.Server{Addr:":8080",Handler:newHandler(config{token:token,modules:mods,registry:registry,crm:crm,licensePath:os.Getenv("OMISHA_LICENSE_PATH"),publicKeyPath:os.Getenv("OMISHA_LICENSE_PUBLIC_KEY_PATH")}),ReadHeaderTimeout:5*time.Second,ReadTimeout:10*time.Second,WriteTimeout:10*time.Second,IdleTimeout:30*time.Second,MaxHeaderBytes:1<<16}
+ accountingPath:=os.Getenv("OMISHA_ACCOUNTING_PATH");if accountingPath==""{accountingPath="/data/accounting.json"}
+ accounts,err:=openAccounting(accountingPath);if err!=nil{log.Fatal(err)}
+ srv:=&http.Server{Addr:":8080",Handler:newHandler(config{token:token,modules:mods,registry:registry,crm:crm,accounts:accounts,licensePath:os.Getenv("OMISHA_LICENSE_PATH"),publicKeyPath:os.Getenv("OMISHA_LICENSE_PUBLIC_KEY_PATH")}),ReadHeaderTimeout:5*time.Second,ReadTimeout:10*time.Second,WriteTimeout:10*time.Second,IdleTimeout:30*time.Second,MaxHeaderBytes:1<<16}
  stop:=make(chan os.Signal,1);signal.Notify(stop,syscall.SIGINT,syscall.SIGTERM)
  go func(){log.Println("Omisha Lite listening on :8080");if err:=srv.ListenAndServe();err!=nil&&err!=http.ErrServerClosed{log.Printf("server error: %v",err)}}()
  <-stop
