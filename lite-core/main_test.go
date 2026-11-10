@@ -1,5 +1,5 @@
 package main
-import ("net/http";"net/http/httptest";"testing";"strings")
+import ("net/http/httptest";"testing";"strings")
 func TestHealth(t *testing.T){
  req:=httptest.NewRequest("GET","/health",nil);rec:=httptest.NewRecorder()
  newHandler(config{token:strings.Repeat("x",32),modules:[]string{"core"}}).ServeHTTP(rec,req)
