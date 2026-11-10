@@ -3,7 +3,14 @@
 !.env.example
 tenants/
 data/
+customer-deployment/
+.omisha-agent-venv/
+*signing.key
+*license.json
+issued.json
+public-key.txt
 __pycache__/
 *.pyc
 *.sqlite
+*.sqlite3
 *.db
