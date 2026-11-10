@@ -13,7 +13,7 @@ import (
  "syscall"
  "time"
 )
-type config struct { token string; modules []string; registry *Registry }
+type config struct { token string; modules []string; registry *Registry; licensePath string; publicKeyPath string }
 func newHandler(c config) http.Handler {
  mux:=http.NewServeMux()
  mux.HandleFunc("GET /health",func(w http.ResponseWriter,r *http.Request){reply(w,200,map[string]any{"status":"ok","service":"omisha-lite-core","version":"5.1-dev"})})
@@ -24,11 +24,22 @@ func newHandler(c config) http.Handler {
   if len(header)!=len(expected)||subtle.ConstantTimeCompare([]byte(header),[]byte(expected))!=1{
    reply(w,401,map[string]string{"error":"unauthorized"});return false
   }
+  if c.licensePath!="" {
+   if c.publicKeyPath==""{reply(w,503,map[string]string{"error":"license public key missing"});return false}
+   if _,err:=loadLicense(c.licensePath,c.publicKeyPath);err!=nil{reply(w,403,map[string]string{"error":"license invalid or expired"});return false}
+  }
   return true
  }
  mux.HandleFunc("GET /v1/modules",func(w http.ResponseWriter,r *http.Request){
   if !authenticated(w,r){return}
-  reply(w,200,map[string]any{"modules":c.modules,"mode":"lite","note":"module catalog only; business modules not implemented"})
+  modules:=c.modules
+  if c.licensePath!=""{
+   ent,err:=loadLicense(c.licensePath,c.publicKeyPath)
+   if err!=nil{reply(w,403,map[string]string{"error":"license invalid or expired"});return}
+   allowed:=map[string]bool{};for _,m:=range ent.Modules{allowed[m]=true}
+   modules=[]string{};for _,m:=range c.modules{if allowed[m]{modules=append(modules,m)}}
+  }
+  reply(w,200,map[string]any{"modules":modules,"mode":"lite","note":"module catalog only; business modules not implemented"})
  })
  mux.HandleFunc("GET /v1/companies",func(w http.ResponseWriter,r *http.Request){
   if !authenticated(w,r){return}
@@ -44,6 +55,12 @@ func newHandler(c config) http.Handler {
   if err:=dec.Decode(&company);err!=nil{reply(w,400,map[string]string{"error":"invalid JSON"});return}
   var extra any
   if err:=dec.Decode(&extra);err!=io.EOF{reply(w,400,map[string]string{"error":"trailing JSON"});return}
+  if c.licensePath!=""{
+   ent,err:=loadLicense(c.licensePath,c.publicKeyPath)
+   if err!=nil{reply(w,403,map[string]string{"error":"license invalid or expired"});return}
+   allowed:=map[string]bool{};for _,m:=range ent.Modules{allowed[m]=true}
+   for _,m:=range company.Modules{if !allowed[m]{reply(w,403,map[string]string{"error":"module not licensed"});return}}
+  }
   if err:=c.registry.upsert(company);err!=nil{reply(w,400,map[string]string{"error":err.Error()});return}
   reply(w,200,map[string]any{"company":company.ID,"status":"saved"})
  })
@@ -63,7 +80,7 @@ func main(){
  }
  path:=os.Getenv("OMISHA_REGISTRY_PATH");if path==""{path="/data/companies.json"}
  registry,err:=openRegistry(path);if err!=nil{log.Fatal(err)}
- srv:=&http.Server{Addr:":8080",Handler:newHandler(config{token:token,modules:mods,registry:registry}),ReadHeaderTimeout:5*time.Second,ReadTimeout:10*time.Second,WriteTimeout:10*time.Second,IdleTimeout:30*time.Second,MaxHeaderBytes:1<<16}
+ srv:=&http.Server{Addr:":8080",Handler:newHandler(config{token:token,modules:mods,registry:registry,licensePath:os.Getenv("OMISHA_LICENSE_PATH"),publicKeyPath:os.Getenv("OMISHA_LICENSE_PUBLIC_KEY_PATH")}),ReadHeaderTimeout:5*time.Second,ReadTimeout:10*time.Second,WriteTimeout:10*time.Second,IdleTimeout:30*time.Second,MaxHeaderBytes:1<<16}
  stop:=make(chan os.Signal,1);signal.Notify(stop,syscall.SIGINT,syscall.SIGTERM)
  go func(){log.Println("Omisha Lite listening on :8080");if err:=srv.ListenAndServe();err!=nil&&err!=http.ErrServerClosed{log.Printf("server error: %v",err)}}()
  <-stop
