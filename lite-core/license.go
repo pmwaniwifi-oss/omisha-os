@@ -4,6 +4,7 @@ import (
  "crypto/ed25519"
  "encoding/base64"
  "encoding/json"
+ "bytes"
  "errors"
  "os"
  "sort"
@@ -38,7 +39,10 @@ func verifyLicense(licenseJSON []byte, publicKey string, now time.Time)(Entitlem
  var outer map[string]json.RawMessage
  if err:=json.Unmarshal(licenseJSON,&outer);err!=nil{return Entitlement{},err}
  if err:=json.Unmarshal(outer["payload"],&payload);err!=nil{return Entitlement{},err}
- canonical,err:=json.Marshal(payload);if err!=nil{return Entitlement{},err}
+ var buf bytes.Buffer
+ enc:=json.NewEncoder(&buf);enc.SetEscapeHTML(false)
+ if err:=enc.Encode(payload);err!=nil{return Entitlement{},err}
+ canonical:=bytes.TrimSuffix(buf.Bytes(),[]byte("\\n"))
  // Go encoding/json sorts map keys and emits compact JSON, matching Python's
  // sorted-key canonical encoding for the ASCII fields used by license issuance.
  if !ed25519.Verify(ed25519.PublicKey(key),canonical,sig){return Entitlement{},errors.New("invalid license signature")}
