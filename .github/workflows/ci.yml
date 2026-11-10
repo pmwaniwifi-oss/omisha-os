@@ -8,11 +8,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Python syntax
-        run: python -m py_compile control/server.py tenant-app/app.py
+        run: python -m py_compile licensing/server.py onprem/agent.py module-runtime/app.py
       - name: Docker builds
         run: |
-          docker build -t omisha-control:ci ./control
-          docker build -t omisha-tenant-app:3.1 ./tenant-app
+          docker build -t omisha-license:ci licensing
+          docker build -t omisha-module-runtime:ci module-runtime
       - name: Compose syntax
-        run: |
-          OMISHA_HOST_ROOT=/opt/omisha-os ADMIN_TOKEN=dummy SHARED_POSTGRES_PASSWORD=dummy docker compose config --quiet
+        run: OMISHA_LICENSE_ADMIN_TOKEN=ci-token docker compose -f licensing/compose.yml config --quiet
