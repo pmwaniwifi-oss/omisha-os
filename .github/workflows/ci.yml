@@ -7,14 +7,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: lite-core/go.mod
+      - name: Go unit tests
+        run: cd lite-core && go test ./... && go vet ./...
       - name: Python syntax
         run: python -m py_compile control-plane/app.py licensing/server.py onprem/agent.py module-runtime/app.py
       - name: Docker builds
         run: |
+          docker build -t omisha-lite:ci lite-core
           docker build -t omisha-control:ci control-plane
           docker build -t omisha-license:ci licensing
           docker build -t omisha-module-runtime:ci module-runtime
       - name: Compose syntax
         run: |
+          OMISHA_LITE_TOKEN=ci-token docker compose -f lite-core/compose.yml config --quiet
           OMISHA_CONTROL_ADMIN_TOKEN=ci-token docker compose -f control-plane/compose.yml config --quiet
           OMISHA_LICENSE_ADMIN_TOKEN=ci-token docker compose -f licensing/compose.yml config --quiet
