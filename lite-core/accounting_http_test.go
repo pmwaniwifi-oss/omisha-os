@@ -12,8 +12,10 @@ func TestAccountingHTTP(t *testing.T){
  accounts,err:=openAccounting(filepath.Join(dir,"accounts.json"));if err!=nil{t.Fatal(err)}
  if err:=registry.upsert(Company{ID:"finance-co",Name:"Finance",Modules:[]string{"finance"}});err!=nil{t.Fatal(err)}
  if err:=registry.upsert(Company{ID:"crm-only",Name:"CRM",Modules:[]string{"crm"}});err!=nil{t.Fatal(err)}
+ ledgers,err:=openLedgers(filepath.Join(dir,"ledgers.json"));if err!=nil{t.Fatal(err)}
+ for _,id:=range []string{"cash","sales","output-igst"}{if err:=ledgers.create(LedgerAccount{ID:id,CompanyID:"finance-co",Name:id,Group:"asset"});err!=nil{t.Fatal(err)}}
  token:=strings.Repeat("s",32)
- h:=newHandler(config{token:token,registry:registry,accounts:accounts})
+ h:=newHandler(config{token:token,registry:registry,accounts:accounts,ledgers:ledgers})
  call:=func(method,path,body string,auth bool)*httptest.ResponseRecorder{
   req:=httptest.NewRequest(method,path,strings.NewReader(body))
   if auth{req.Header.Set("Authorization","Bearer "+token)}
