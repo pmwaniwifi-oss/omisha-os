@@ -3,6 +3,7 @@
 ## Implemented prototype components
 - Go Lite Core: health/readiness, bearer-token protected module catalog, persistent single-instance company registry.
 - CRM MVP: per-company contact CRUD subset (create/update/list), company module gate and admin-only API, with unit/HTTP tests.
+- Finance MVP: balanced double-entry journals, tenant-scoped trial balance, GST arithmetic estimates, invoice calculation/list APIs and automated tests. No legal GST compliance claims.
 - Offline Ed25519 license signature/expiry verification and entitlement checks on protected endpoints.
 - Startup fails closed without license files unless `OMISHA_DEV_MODE=true` is explicitly set.
 - Python licensing authority with issuance, activation tracking, and revocation.
@@ -13,7 +14,7 @@
 - Shared PostgreSQL-backed multi-tenant Core, transactional migrations, full RBAC/SSO, UI, billing/payment processing.
 - Customer deployment agent authentication and signed remote jobs.
 - Online license revocation sync in Go Core; offline checks alone do not enforce activation counts.
-- Full CRM (pipeline, UI, customer RBAC), and working finance, manufacturing, carbon, IoT or AI business logic.
+- Full CRM (pipeline, UI, customer RBAC); statutory accounting and GST features (chart of accounts, financial statements, GSTN filing, reconciliations, audit trail); manufacturing, carbon, IoT and AI business modules.
 - Production observability, encrypted backups, penetration tests, capacity benchmarks, tested disaster recovery.
 
 ## Local development
