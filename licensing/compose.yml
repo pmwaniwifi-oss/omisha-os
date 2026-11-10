@@ -1,0 +1,19 @@
+services:
+  license-server:
+    build: .
+    restart: unless-stopped
+    environment:
+      OMISHA_LICENSE_ADMIN_TOKEN: ${OMISHA_LICENSE_ADMIN_TOKEN:?Set admin token}
+    ports:
+      - "127.0.0.1:8090:8090"
+    volumes:
+      - licensing-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+volumes:
+  licensing-data:
