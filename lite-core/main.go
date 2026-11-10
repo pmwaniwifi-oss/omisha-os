@@ -1,27 +1,51 @@
 package main
 
 import (
+ "context"
  "crypto/subtle"
  "encoding/json"
+ "io"
  "log"
  "net/http"
  "os"
  "os/signal"
  "strings"
  "syscall"
- "context"
  "time"
 )
-
-type config struct { token string; modules []string }
+type config struct { token string; modules []string; registry *Registry }
 func newHandler(c config) http.Handler {
  mux:=http.NewServeMux()
  mux.HandleFunc("GET /health",func(w http.ResponseWriter,r *http.Request){reply(w,200,map[string]any{"status":"ok","service":"omisha-lite-core","version":"5.1-dev"})})
  mux.HandleFunc("GET /ready",func(w http.ResponseWriter,r *http.Request){reply(w,200,map[string]any{"ready":true})})
+ authenticated:=func(w http.ResponseWriter,r *http.Request)bool{
+  header:=r.Header.Get("Authorization")
+  expected:="Bearer "+c.token
+  if len(header)!=len(expected)||subtle.ConstantTimeCompare([]byte(header),[]byte(expected))!=1{
+   reply(w,401,map[string]string{"error":"unauthorized"});return false
+  }
+  return true
+ }
  mux.HandleFunc("GET /v1/modules",func(w http.ResponseWriter,r *http.Request){
-  auth:=strings.TrimPrefix(r.Header.Get("Authorization"),"Bearer ")
-  if len(auth)!=len(c.token)||subtle.ConstantTimeCompare([]byte(auth),[]byte(c.token))!=1 {reply(w,401,map[string]string{"error":"unauthorized"});return}
+  if !authenticated(w,r){return}
   reply(w,200,map[string]any{"modules":c.modules,"mode":"lite","note":"module catalog only; business modules not implemented"})
+ })
+ mux.HandleFunc("GET /v1/companies",func(w http.ResponseWriter,r *http.Request){
+  if !authenticated(w,r){return}
+  if c.registry==nil{reply(w,503,map[string]string{"error":"registry unavailable"});return}
+  reply(w,200,map[string]any{"companies":c.registry.list()})
+ })
+ mux.HandleFunc("PUT /v1/companies",func(w http.ResponseWriter,r *http.Request){
+  if !authenticated(w,r){return}
+  if c.registry==nil{reply(w,503,map[string]string{"error":"registry unavailable"});return}
+  r.Body=http.MaxBytesReader(w,r.Body,16384)
+  var company Company
+  dec:=json.NewDecoder(r.Body);dec.DisallowUnknownFields()
+  if err:=dec.Decode(&company);err!=nil{reply(w,400,map[string]string{"error":"invalid JSON"});return}
+  var extra any
+  if err:=dec.Decode(&extra);err!=io.EOF{reply(w,400,map[string]string{"error":"trailing JSON"});return}
+  if err:=c.registry.upsert(company);err!=nil{reply(w,400,map[string]string{"error":err.Error()});return}
+  reply(w,200,map[string]any{"company":company.ID,"status":"saved"})
  })
  return mux
 }
@@ -34,13 +58,14 @@ func main(){
  if len(token)<24 {log.Fatal("OMISHA_LITE_TOKEN must be at least 24 characters")}
  mods:=[]string{"core"}
  if raw:=os.Getenv("OMISHA_MODULES");raw!="" {
-  allowed:=map[string]bool{"core":true,"crm":true,"finance":true,"manufacturing":true,"carbon":true,"compliance":true,"projects":true,"iot":true,"ai":true}
   seen:=map[string]bool{"core":true}
-  for _,v:=range strings.Split(raw,","){v=strings.TrimSpace(v);if !allowed[v]{log.Fatalf("unknown module: %s",v)};if !seen[v]{mods=append(mods,v);seen[v]=true}}
+  for _,v:=range strings.Split(raw,","){v=strings.TrimSpace(v);if !allowedModules[v]{log.Fatalf("unknown module: %s",v)};if !seen[v]{mods=append(mods,v);seen[v]=true}}
  }
- srv:=&http.Server{Addr:":8080",Handler:newHandler(config{token:token,modules:mods}),ReadHeaderTimeout:5*time.Second,ReadTimeout:10*time.Second,WriteTimeout:10*time.Second,IdleTimeout:30*time.Second,MaxHeaderBytes:1<<16}
+ path:=os.Getenv("OMISHA_REGISTRY_PATH");if path==""{path="/data/companies.json"}
+ registry,err:=openRegistry(path);if err!=nil{log.Fatal(err)}
+ srv:=&http.Server{Addr:":8080",Handler:newHandler(config{token:token,modules:mods,registry:registry}),ReadHeaderTimeout:5*time.Second,ReadTimeout:10*time.Second,WriteTimeout:10*time.Second,IdleTimeout:30*time.Second,MaxHeaderBytes:1<<16}
  stop:=make(chan os.Signal,1);signal.Notify(stop,syscall.SIGINT,syscall.SIGTERM)
- go func(){log.Println("Omisha Lite listening on :8080");if err:=srv.ListenAndServe();err!=nil&&err!=http.ErrServerClosed{log.Fatal(err)}}()
+ go func(){log.Println("Omisha Lite listening on :8080");if err:=srv.ListenAndServe();err!=nil&&err!=http.ErrServerClosed{log.Printf("server error: %v",err)}}()
  <-stop
  ctx,cancel:=context.WithTimeout(context.Background(),10*time.Second);defer cancel()
  if err:=srv.Shutdown(ctx);err!=nil{log.Printf("shutdown: %v",err)}
