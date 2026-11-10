@@ -4,6 +4,7 @@ services:
     restart: unless-stopped
     init: true
     environment:
+      OMISHA_DEV_MODE: ${OMISHA_DEV_MODE:-false}
       OMISHA_LITE_TOKEN: ${OMISHA_LITE_TOKEN:?Set a strong token}
       OMISHA_MODULES: ${OMISHA_MODULES:-core}
       OMISHA_REGISTRY_PATH: /data/companies.json
