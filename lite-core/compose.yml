@@ -7,12 +7,15 @@ services:
       OMISHA_LITE_TOKEN: ${OMISHA_LITE_TOKEN:?Set a strong token}
       OMISHA_MODULES: ${OMISHA_MODULES:-core}
       OMISHA_REGISTRY_PATH: /data/companies.json
+      OMISHA_LICENSE_PATH: ${OMISHA_LICENSE_PATH:-}
+      OMISHA_LICENSE_PUBLIC_KEY_PATH: ${OMISHA_LICENSE_PUBLIC_KEY_PATH:-}
       GOMEMLIMIT: 96MiB
       GOGC: "100"
     ports:
       - "127.0.0.1:18081:8080"
     volumes:
       - lite-data:/data
+      - ${OMISHA_LICENSES_DIR:-./licenses}:/licenses:ro
     read_only: true
     mem_limit: 128m
     cpus: 1.0
