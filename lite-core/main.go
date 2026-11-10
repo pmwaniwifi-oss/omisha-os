@@ -72,6 +72,7 @@ func reply(w http.ResponseWriter,code int,v any){
 }
 func main(){
  token:=os.Getenv("OMISHA_LITE_TOKEN")
+ if os.Getenv("OMISHA_DEV_MODE")!="true" && (os.Getenv("OMISHA_LICENSE_PATH")=="" || os.Getenv("OMISHA_LICENSE_PUBLIC_KEY_PATH")==""){log.Fatal("production requires license and pinned public key; set OMISHA_DEV_MODE=true only for local development")}
  if len(token)<24 {log.Fatal("OMISHA_LITE_TOKEN must be at least 24 characters")}
  mods:=[]string{"core"}
  if raw:=os.Getenv("OMISHA_MODULES");raw!="" {
