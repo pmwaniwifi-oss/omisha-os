@@ -1,0 +1,17 @@
+name: Licensing CI
+on:
+  push:
+    paths: ['licensing/**','onprem/**','.github/workflows/licensing-ci.yml']
+  pull_request:
+    paths: ['licensing/**','onprem/**','.github/workflows/licensing-ci.yml']
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Python
+        run: python -m py_compile licensing/server.py onprem/agent.py
+      - name: Build license server
+        run: docker build -t omisha-licensing:ci licensing
+      - name: Validate Compose
+        run: OMISHA_LICENSE_ADMIN_TOKEN=ci-token docker compose -f licensing/compose.yml config --quiet
