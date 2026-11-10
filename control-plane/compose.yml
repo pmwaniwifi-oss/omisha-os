@@ -1,0 +1,19 @@
+services:
+  control:
+    build: .
+    restart: unless-stopped
+    environment:
+      OMISHA_CONTROL_ADMIN_TOKEN: ${OMISHA_CONTROL_ADMIN_TOKEN:?Set a strong control admin token}
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - control-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+volumes:
+  control-data:
