@@ -1,0 +1,56 @@
+name: omisha-scale
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: omisha
+      POSTGRES_DB: omisha
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets:
+      - postgres_password
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U omisha -d omisha"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    security_opt:
+      - no-new-privileges:true
+  valkey:
+    image: valkey/valkey:8-alpine
+    profiles: ["cache"]
+    restart: unless-stopped
+    command: ["valkey-server", "--save", "60", "1000", "--appendonly", "yes", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - valkeydata:/data
+    networks:
+      - backend
+    mem_limit: 192m
+    security_opt:
+      - no-new-privileges:true
+  nats:
+    image: nats:2.11-alpine
+    profiles: ["events"]
+    restart: unless-stopped
+    command: ["-js", "-sd", "/data", "-m", "8222"]
+    volumes:
+      - natsdata:/data
+    networks:
+      - backend
+    mem_limit: 256m
+    security_opt:
+      - no-new-privileges:true
+networks:
+  backend:
+    internal: true
+volumes:
+  pgdata:
+  valkeydata:
+  natsdata:
+secrets:
+  postgres_password:
+    file: ./secrets/postgres_password
